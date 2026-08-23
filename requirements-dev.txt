@@ -1,0 +1,3 @@
+# 開発用依存（ランタイム依存は requirements.txt を参照）
+ruff
+pytest
