@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pytest:*)",
+      "Bash(python scripts/:*)",
+      "Bash(python3 scripts/:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; case \"$f\" in *.py) python3 -m ruff format \"$f\" && python3 -m ruff check --fix \"$f\";; esac; } 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "ruff format/check"
+          }
+        ]
+      }
+    ]
+  }
+}

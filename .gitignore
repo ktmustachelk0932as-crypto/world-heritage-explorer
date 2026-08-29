@@ -216,3 +216,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project specific
+# docs/ は非公開（開発計画書等をリポジトリに含めない）
+docs/
+# 生データ・キャッシュDBはコミットしない（ディレクトリ自体は .gitkeep で保持）
+data/raw/*
+!data/raw/.gitkeep
+data/cache/*
+!data/cache/.gitkeep
+*.sqlite
+
+# Claude Code（個人設定・メモリはコミットしない。settings.json/rules/skills は共有）
+.claude/settings.local.json
+.claude/memory/

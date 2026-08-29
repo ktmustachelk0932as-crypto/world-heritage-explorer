@@ -1,0 +1,5 @@
+# Streamlit テーマ・レイアウト設定
+# 参考: https://docs.streamlit.io/develop/api-reference/configuration/config.toml
+
+[theme]
+base = "light"
