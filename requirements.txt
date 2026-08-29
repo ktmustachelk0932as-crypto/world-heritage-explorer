@@ -1,8 +1,0 @@
-streamlit
-streamlit-folium
-folium
-plotly
-pandas
-geopandas
-requests
-tenacity
