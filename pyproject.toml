@@ -26,4 +26,4 @@ package = false
 [tool.ruff.lint.per-file-ignores]
 # Streamlit エントリー/ページはインポート前に sys.path を調整するため E402 を許容する
 "app/main.py" = ["E402"]
-"app/pages/*" = ["E402"]
+"app/views/*" = ["E402"]

@@ -32,7 +32,6 @@ def _summary() -> pd.DataFrame:
     return summarize_by_country(_load_sites())
 
 
-st.set_page_config(page_title="国別サマリー", page_icon="🌐", layout="wide")
 st.title("国別サマリー")
 
 try:
