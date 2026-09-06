@@ -70,6 +70,7 @@ class _ItemRecord:
     def __init__(self) -> None:
         self.whc_id_raw: str | None = None
         self.name: str | None = None
+        self.name_ja: str | None = None
         self.latitude: float | None = None
         self.longitude: float | None = None
         self.years: set[int] = set()
@@ -119,6 +120,10 @@ def _aggregate_by_item(raw_bindings: list[dict]) -> dict[str, _ItemRecord]:
             label = row.get("itemLabel", {}).get("value")
             if label:
                 record.name = label
+        if record.name_ja is None:
+            label_ja = row.get("itemLabelJa", {}).get("value")
+            if label_ja:
+                record.name_ja = label_ja
 
         if record.latitude is None:
             coord = row.get("coord", {}).get("value")
@@ -184,6 +189,7 @@ class _MergedSite(NamedTuple):
     """グループ（遺産1件）を統合した結果。"""
 
     name: str | None
+    name_ja: str | None
     latitude: float | None
     longitude: float | None
     year: int | None
@@ -197,8 +203,8 @@ def _merge_group(qids: list[str], items: dict[str, _ItemRecord]) -> _MergedSite:
     """代表アイテムを優先しつつ、グループ内の全アイテムから欠損項目を補って統合する。
 
     国・登録基準・登録年の候補はグループ全体の和集合を取る（複合遺産の構成資産側にしか
-    タグ付けされていない場合があるため）。名称・座標・画像は先頭（代表）から順に見て
-    最初に見つかった非欠損値を採用する。登録年は候補の中から1978年（世界遺産条約に
+    タグ付けされていない場合があるため）。名称（英語・日本語）・座標・画像は先頭（代表）
+    から順に見て最初に見つかった非欠損値を採用する。登録年は候補の中から1978年（世界遺産条約に
     基づく最初の登録年）以降の最小値を採る（Wikidataの誤記載による無関係な日付を除外
     するため）。1978年以降の候補が一つも無ければ欠損として扱う。
 
@@ -206,6 +212,7 @@ def _merge_group(qids: list[str], items: dict[str, _ItemRecord]) -> _MergedSite:
     リンクやデバッグ用に保持する。
     """
     name: str | None = None
+    name_ja: str | None = None
     latitude: float | None = None
     longitude: float | None = None
     image_filename: str | None = None
@@ -217,6 +224,8 @@ def _merge_group(qids: list[str], items: dict[str, _ItemRecord]) -> _MergedSite:
         record = items[qid]
         if name is None and record.name is not None:
             name = record.name
+        if name_ja is None and record.name_ja is not None:
+            name_ja = record.name_ja
         if latitude is None and record.latitude is not None:
             latitude = record.latitude
             longitude = record.longitude
@@ -238,6 +247,7 @@ def _merge_group(qids: list[str], items: dict[str, _ItemRecord]) -> _MergedSite:
     representative_qid = qids[0] if qids else None
     return _MergedSite(
         name,
+        name_ja,
         latitude,
         longitude,
         year,
@@ -305,7 +315,9 @@ def build_dataframe(raw_bindings: list[dict]) -> pd.DataFrame:
             fallback_count += 1
 
         merged = _merge_group(ordered_qids, items)
-        name = merged.name
+        # 表示は日本語名を優先し、Wikidata に日本語ラベルが無い遺産は英語名にフォールバック
+        # する（残りは core/site_names_ja.py の対訳辞書で補完）。
+        name = merged.name_ja or merged.name
         latitude = merged.latitude
         longitude = merged.longitude
         year = merged.year

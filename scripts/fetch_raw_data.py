@@ -38,8 +38,13 @@ REQUEST_TIMEOUT_SECONDS: float = 90.0
 # （wdt:）として付与されている方が実際には多い（Wikidataの実データで確認済み：
 # 修飾子経由のみだと約24%しかカバーできないが、直接ステートメントとのUNIONで
 # 約98%までカバー率が上がる）。そのため両方をUNIONで取得する。
+# ``?itemLabelJa`` は遺産名の日本語表示用。共通の ``wikibase:label`` サービスを
+# ``"ja,en"`` にすると ``?criteriaLabel``（(i)〜(x)）まで日本語化してしまい、
+# build_dataset 側の登録基準の完全一致判定が壊れて全遺産が脱落する。そのため
+# item ラベル専用の ``rdfs:label`` + 言語フィルタで隔離して取得する。日本語
+# ラベルが無い項目は束縛されない（build_dataset 側で英語名にフォールバック）。
 SPARQL_QUERY = """
-SELECT ?item ?itemLabel ?whcId ?coord ?inscribedDate
+SELECT ?item ?itemLabel ?itemLabelJa ?whcId ?coord ?inscribedDate
        ?country ?countryLabel ?isoCode ?criteria ?criteriaLabel WHERE {
   ?item p:P1435 ?stmt .
   ?stmt ps:P1435 wd:Q9259 .
@@ -55,6 +60,7 @@ SELECT ?item ?itemLabel ?whcId ?coord ?inscribedDate
     ?item wdt:P17 ?country .
     OPTIONAL { ?country wdt:P297 ?isoCode . }
   }
+  OPTIONAL { ?item rdfs:label ?itemLabelJa . FILTER(LANG(?itemLabelJa) = "ja") }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 """

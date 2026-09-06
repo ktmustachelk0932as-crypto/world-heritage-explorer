@@ -18,6 +18,7 @@ def _binding(
     iso: str | None = None,
     criteria: str | None = None,
     image: str | None = None,
+    item_label_ja: str | None = None,
 ) -> dict:
     """SPARQL結果JSONの束縛（binding）1行分を模した辞書を組み立てる。"""
     row: dict = {
@@ -25,6 +26,8 @@ def _binding(
         "itemLabel": {"value": item_label},
         "whcId": {"value": whc_id},
     }
+    if item_label_ja is not None:
+        row["itemLabelJa"] = {"value": item_label_ja}
     if coord is not None:
         row["coord"] = {"value": coord}
     if year is not None:
@@ -336,6 +339,40 @@ def test_output_schema_and_categories() -> None:
 
     assert list(df.columns) == [*REQUIRED_COLUMNS, *OPTIONAL_COLUMNS]
     assert set(df["category"]).issubset(ALLOWED_CATEGORIES)
+
+
+def test_japanese_label_is_preferred_for_name() -> None:
+    """itemLabelJa があれば name に採用し、無ければ英語 itemLabel を使う。"""
+    bindings = [
+        _binding(
+            "Q1",
+            "Galapagos Islands",
+            "1",
+            coord="Point(1.0 1.0)",
+            year=2000,
+            country_qid="Q1",
+            country_label="Country A",
+            iso="AA",
+            criteria="(i)",
+            item_label_ja="ガラパゴス諸島",
+        ),
+        _binding(
+            "Q2",
+            "Tiya",
+            "2",
+            coord="Point(2.0 2.0)",
+            year=2001,
+            country_qid="Q1",
+            country_label="Country A",
+            iso="AA",
+            criteria="(i)",
+        ),
+    ]
+
+    df = build_dataframe(bindings)
+
+    assert df.loc[df["site_id"] == 1].iloc[0]["name"] == "ガラパゴス諸島"
+    assert df.loc[df["site_id"] == 2].iloc[0]["name"] == "Tiya"
 
 
 def test_implausible_pre_1978_date_is_ignored_in_favor_of_valid_candidate() -> None:
