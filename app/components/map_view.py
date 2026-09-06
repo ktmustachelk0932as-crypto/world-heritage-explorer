@@ -21,6 +21,13 @@ CATEGORY_LABELS_JA: dict[str, str] = {
     "Mixed": "複合遺産",
 }
 
+# Plotly など hex 前提のグラフで使う分類色（folium マーカーの色名に対応させる）。
+CATEGORY_HEX_COLORS: dict[str, str] = {
+    "Cultural": "#1f77b4",
+    "Natural": "#2ca02c",
+    "Mixed": "#9467bd",
+}
+
 _DEFAULT_CENTER: tuple[float, float] = (20.0, 0.0)
 _DEFAULT_ZOOM: int = 2
 

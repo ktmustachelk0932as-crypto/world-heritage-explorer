@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from app.components.map_view import CATEGORY_LABELS_JA
+from app.components.map_view import CATEGORY_HEX_COLORS, CATEGORY_LABELS_JA
 from core.aggregations import CATEGORY_COLUMNS
 
 # 集計列（cultural/natural/mixed）→ 日本語ラベル。地図の凡例と表記を合わせる。
@@ -14,11 +14,9 @@ _COLUMN_LABELS_JA: dict[str, str] = {
     CATEGORY_COLUMNS[key]: label for key, label in CATEGORY_LABELS_JA.items()
 }
 
-# 分類ごとの色。地図マーカー（文化=青/自然=緑/複合=紫）に対応させる。
+# 分類ごとの色（日本語ラベル→hex）。地図マーカーの色に対応させる。
 _CATEGORY_COLORS_JA: dict[str, str] = {
-    CATEGORY_LABELS_JA["Cultural"]: "#1f77b4",
-    CATEGORY_LABELS_JA["Natural"]: "#2ca02c",
-    CATEGORY_LABELS_JA["Mixed"]: "#9467bd",
+    CATEGORY_LABELS_JA[key]: color for key, color in CATEGORY_HEX_COLORS.items()
 }
 
 

@@ -6,8 +6,10 @@ import pandas as pd
 
 from core.aggregations import (
     COUNTRY_SUMMARY_COLUMNS,
+    YEARLY_COUNTS_COLUMNS,
     count_by_category,
     summarize_by_country,
+    yearly_counts,
 )
 from core.data_loader import REQUIRED_COLUMNS
 
@@ -64,3 +66,46 @@ def test_count_by_category_zero_for_absent_category() -> None:
     cultural_only = _SAMPLE[_SAMPLE["category"] == "Cultural"]
     counts = count_by_category(cultural_only)
     assert counts == {"Cultural": 2, "Natural": 0, "Mixed": 0}
+
+
+def test_yearly_counts_columns_and_fills_gap_years() -> None:
+    result = yearly_counts(_SAMPLE)
+    assert list(result.columns) == list(YEARLY_COUNTS_COLUMNS)
+    # 1978〜2000 の全年が連続して並ぶ（登録のない年も 0 で埋める）。
+    assert result["year"].tolist() == list(range(1978, 2001))
+    assert (result["year"].diff().dropna() == 1).all()
+
+
+def test_yearly_counts_values_and_breakdown() -> None:
+    result = yearly_counts(_SAMPLE).set_index("year")
+    assert result.loc[1978, "total"] == 2
+    assert result.loc[1978, "cultural"] == 1
+    assert result.loc[1978, "natural"] == 1
+    assert result.loc[1993, "total"] == 3
+    assert result.loc[1993, "natural"] == 2
+    assert result.loc[1990, "total"] == 0  # 登録のない年
+
+
+def test_yearly_counts_filters_by_country() -> None:
+    result = yearly_counts(_SAMPLE, country="Japan").set_index("year")
+    assert result["total"].sum() == 4
+    assert result.index.min() == 1993
+    assert result.loc[2000, "mixed"] == 1
+
+
+def test_yearly_counts_cumulative_is_monotonic_and_reaches_total() -> None:
+    result = yearly_counts(_SAMPLE, cumulative=True)
+    assert result["total"].is_monotonic_increasing
+    assert result["total"].iloc[-1] == len(_SAMPLE)
+    assert result["total"].iloc[0] == 2  # 1978 の 2 件
+
+
+def test_yearly_counts_empty_input() -> None:
+    result = yearly_counts(_SAMPLE.iloc[0:0])
+    assert list(result.columns) == list(YEARLY_COUNTS_COLUMNS)
+    assert result.empty
+
+
+def test_yearly_counts_unknown_country_returns_empty() -> None:
+    result = yearly_counts(_SAMPLE, country="Atlantis")
+    assert result.empty
