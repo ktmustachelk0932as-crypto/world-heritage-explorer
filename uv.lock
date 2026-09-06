@@ -6,10 +6,10 @@ resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'emscripten'",
     "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and sys_platform == 'win32'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
@@ -1518,6 +1518,7 @@ dependencies = [
     { name = "geopandas" },
     { name = "pandas" },
     { name = "plotly" },
+    { name = "pyarrow" },
     { name = "requests" },
     { name = "streamlit" },
     { name = "streamlit-folium" },
@@ -1536,6 +1537,7 @@ requires-dist = [
     { name = "geopandas", specifier = ">=1.1,<2" },
     { name = "pandas", specifier = ">=3.0,<4" },
     { name = "plotly", specifier = ">=7.0,<8" },
+    { name = "pyarrow", specifier = ">=25.0,<26" },
     { name = "requests", specifier = ">=2.34,<3" },
     { name = "streamlit", specifier = ">=1.62,<2" },
     { name = "streamlit-folium", specifier = ">=0.27,<1" },
