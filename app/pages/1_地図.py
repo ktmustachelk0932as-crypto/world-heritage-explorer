@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -17,7 +18,7 @@ from app.components.map_view import (
     build_map,
     find_site_by_coordinates,
 )
-from core.data_loader import load_heritage_sites
+from core.data_loader import PARQUET_PATH, SAMPLE_CSV_PATH, load_heritage_sites
 
 _SELECTED_KEY = "selected_site_id"
 
@@ -38,7 +39,24 @@ with map_col:
         for key, label in CATEGORY_LABELS_JA.items()
     )
     st.markdown(legend, unsafe_allow_html=True)
-    st.caption(f"{len(sites)} 件を表示")
+
+    source_path = PARQUET_PATH if PARQUET_PATH.exists() else SAMPLE_CSV_PATH
+    fetched_at = (
+        datetime.fromtimestamp(source_path.stat().st_mtime, tz=UTC)
+        .astimezone()
+        .strftime("%Y-%m-%d")
+    )
+    st.caption(f"{len(sites)} 件を表示（データ取得日: {fetched_at}）")
+    with st.expander("※ データについての注記"):
+        st.markdown(
+            "- 実際の世界遺産登録数と完全には一致しない場合があります"
+            "（データ取得元の制約により一部の遺産が含まれていません）\n"
+            "- 複数地点にまたがる遺産は代表1地点の座標で表示しています\n"
+            "- 複数国にまたがる遺産（越境遺産）は代表1か国のみを表示しています\n"
+            "- 登録年は初回登録年のみを表示しており、後年の登録範囲の拡張・変更は反映していません\n"
+            "- 座標・分類（文化遺産/自然遺産/複合遺産）はWikidataの情報を基に算出しており、"
+            "UNESCO公式データと差異がある場合があります"
+        )
 
     map_state = st_folium(
         build_map(sites),
