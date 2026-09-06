@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pandas as pd
 
-from core.data_loader import ALLOWED_CATEGORIES, REQUIRED_COLUMNS, load_heritage_sites
+from core.data_loader import (
+    ALLOWED_CATEGORIES,
+    OPTIONAL_COLUMNS,
+    REQUIRED_COLUMNS,
+    load_heritage_sites,
+)
 
 
 def test_returns_non_empty_dataframe() -> None:
@@ -15,7 +20,14 @@ def test_returns_non_empty_dataframe() -> None:
 
 def test_has_required_columns() -> None:
     df = load_heritage_sites()
-    assert list(df.columns) == list(REQUIRED_COLUMNS)
+    assert set(REQUIRED_COLUMNS).issubset(df.columns)
+
+
+def test_optional_columns_always_present() -> None:
+    df = load_heritage_sites()
+    for col in OPTIONAL_COLUMNS:
+        assert col in df.columns
+        assert df[col].notna().all()
 
 
 def test_coordinates_are_present_and_in_range() -> None:

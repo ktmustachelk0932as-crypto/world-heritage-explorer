@@ -10,12 +10,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import streamlit as st
 from streamlit_folium import st_folium
 
+from app.components.detail_panel import render_detail_panel
 from app.components.map_view import (
     CATEGORY_LABELS_JA,
     CATEGORY_MARKER_COLORS,
     build_map,
+    find_site_by_coordinates,
 )
 from core.data_loader import load_heritage_sites
+
+_SELECTED_KEY = "selected_site_id"
 
 st.set_page_config(page_title="地図", page_icon="🗺️", layout="wide")
 st.title("世界遺産マップ")
@@ -26,16 +30,39 @@ except (FileNotFoundError, ValueError) as exc:
     st.error(f"データの読み込みに失敗しました: {exc}")
     st.stop()
 
-legend = "　".join(
-    f"<span style='color:{CATEGORY_MARKER_COLORS[key]}'>●</span> {label}"
-    for key, label in CATEGORY_LABELS_JA.items()
-)
-st.markdown(legend, unsafe_allow_html=True)
-st.caption(f"{len(sites)} 件を表示")
+map_col, detail_col = st.columns([2, 1], gap="large")
 
-st_folium(
-    build_map(sites),
-    use_container_width=True,
-    height=650,
-    returned_objects=[],
+with map_col:
+    legend = "　".join(
+        f"<span style='color:{CATEGORY_MARKER_COLORS[key]}'>●</span> {label}"
+        for key, label in CATEGORY_LABELS_JA.items()
+    )
+    st.markdown(legend, unsafe_allow_html=True)
+    st.caption(f"{len(sites)} 件を表示")
+
+    map_state = st_folium(
+        build_map(sites),
+        use_container_width=True,
+        height=650,
+        returned_objects=["last_object_clicked"],
+    )
+
+clicked = (map_state or {}).get("last_object_clicked")
+if clicked:
+    site = find_site_by_coordinates(sites, clicked["lat"], clicked["lng"])
+    if site is not None:
+        st.session_state[_SELECTED_KEY] = int(site["site_id"])
+
+selected_id = st.session_state.get(_SELECTED_KEY)
+selected_rows = (
+    sites[sites["site_id"] == selected_id]
+    if selected_id is not None
+    else sites.iloc[0:0]
 )
+selected = selected_rows.iloc[0] if not selected_rows.empty else None
+
+with detail_col:
+    render_detail_panel(selected)
+    if selected is not None and st.button("選択をクリア"):
+        del st.session_state[_SELECTED_KEY]
+        st.rerun()

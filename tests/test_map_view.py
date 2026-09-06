@@ -5,7 +5,11 @@ from __future__ import annotations
 import folium
 import pandas as pd
 
-from app.components.map_view import CATEGORY_MARKER_COLORS, build_map
+from app.components.map_view import (
+    CATEGORY_MARKER_COLORS,
+    build_map,
+    find_site_by_coordinates,
+)
 from core.data_loader import REQUIRED_COLUMNS
 
 _SAMPLE = pd.DataFrame(
@@ -50,3 +54,19 @@ def test_map_html_uses_category_colors() -> None:
     html = build_map(_SAMPLE).get_root().render()
     for color in CATEGORY_MARKER_COLORS.values():
         assert color in html
+
+
+def test_find_site_by_coordinates_exact_match() -> None:
+    site = find_site_by_coordinates(_SAMPLE, 34.8394, 134.6939)
+    assert site is not None
+    assert site["name"] == "Himeji-jo"
+
+
+def test_find_site_by_coordinates_within_tolerance() -> None:
+    site = find_site_by_coordinates(_SAMPLE, 34.8394 + 1e-7, 134.6939 - 1e-7)
+    assert site is not None
+    assert int(site["site_id"]) == 661
+
+
+def test_find_site_by_coordinates_no_match() -> None:
+    assert find_site_by_coordinates(_SAMPLE, 0.0, 0.0) is None

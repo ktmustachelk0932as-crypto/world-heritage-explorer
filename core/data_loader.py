@@ -21,6 +21,9 @@ REQUIRED_COLUMNS: tuple[str, ...] = (
     "longitude",
 )
 
+# 元データにあれば値を引き継ぎ、無ければ空文字で必ず用意する任意列。
+OPTIONAL_COLUMNS: tuple[str, ...] = ("criteria",)
+
 ALLOWED_CATEGORIES: frozenset[str] = frozenset({"Cultural", "Natural", "Mixed"})
 
 
@@ -31,8 +34,8 @@ def load_heritage_sites() -> pd.DataFrame:
     緯度経度が欠損・範囲外の行、未知の分類の行は除外する。
 
     Returns:
-        列 ``REQUIRED_COLUMNS`` を持つ DataFrame。``date_inscribed`` は int、
-        ``latitude`` / ``longitude`` は float。
+        列 ``REQUIRED_COLUMNS`` ＋ ``OPTIONAL_COLUMNS`` を持つ DataFrame。
+        ``date_inscribed`` は int、``latitude`` / ``longitude`` は float。
 
     Raises:
         FileNotFoundError: parquet・サンプル CSV のどちらも存在しない場合。
@@ -48,7 +51,8 @@ def load_heritage_sites() -> pd.DataFrame:
     if missing:
         raise ValueError(f"{source.name} に必須列がありません: {', '.join(missing)}")
 
-    df = df.loc[:, list(REQUIRED_COLUMNS)].copy()
+    present_optional = [c for c in OPTIONAL_COLUMNS if c in df.columns]
+    df = df.loc[:, [*REQUIRED_COLUMNS, *present_optional]].copy()
 
     df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
@@ -70,6 +74,12 @@ def load_heritage_sites() -> pd.DataFrame:
     df["longitude"] = df["longitude"].astype(float)
     for col in ("name", "country", "iso_code", "category"):
         df[col] = df[col].astype(str)
+
+    for col in OPTIONAL_COLUMNS:
+        if col in df.columns:
+            df[col] = df[col].fillna("").astype(str)
+        else:
+            df[col] = ""
 
     return df.sort_values("site_id").reset_index(drop=True)
 

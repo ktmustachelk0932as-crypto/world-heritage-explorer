@@ -24,6 +24,9 @@ CATEGORY_LABELS_JA: dict[str, str] = {
 _DEFAULT_CENTER: tuple[float, float] = (20.0, 0.0)
 _DEFAULT_ZOOM: int = 2
 
+# クリック座標とマーカー座標を突き合わせる際の許容誤差（度）。
+_COORD_TOLERANCE: float = 1e-6
+
 
 def build_map(df: pd.DataFrame) -> folium.Map:
     """世界遺産サイトをマーカー表示した folium 地図を組み立てる。
@@ -53,6 +56,36 @@ def build_map(df: pd.DataFrame) -> folium.Map:
         ).add_to(cluster)
 
     return fmap
+
+
+def find_site_by_coordinates(
+    df: pd.DataFrame,
+    lat: float,
+    lng: float,
+    *,
+    tolerance: float = _COORD_TOLERANCE,
+) -> pd.Series | None:
+    """``st_folium`` のクリック座標から該当する世界遺産サイトの行を返す。
+
+    マーカーは ``build_map`` が ``df`` の緯度経度をそのまま使って配置するため、
+    クリック時に返る座標も許容誤差の範囲で一致する。
+
+    Args:
+        df: ``core.data_loader.load_heritage_sites`` が返す形式の DataFrame。
+        lat: クリックされたマーカーの緯度（``last_object_clicked`` の ``lat``）。
+        lng: クリックされたマーカーの経度（``last_object_clicked`` の ``lng``）。
+        tolerance: 座標一致とみなす絶対誤差（度）。
+
+    Returns:
+        一致した最初の行（``pd.Series``）。一致しなければ ``None``。
+    """
+    match = df[
+        (df["latitude"] - lat).abs().le(tolerance)
+        & (df["longitude"] - lng).abs().le(tolerance)
+    ]
+    if match.empty:
+        return None
+    return match.iloc[0]
 
 
 def _popup_html(row: tuple) -> str:  # namedtuple row from itertuples
