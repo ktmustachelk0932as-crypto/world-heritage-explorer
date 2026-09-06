@@ -49,7 +49,9 @@ def render_country_bar_chart(summary: pd.DataFrame, *, top_n: int = 20) -> None:
         orientation="h",
         color_discrete_map=_CATEGORY_COLORS_JA,
         category_orders={
-            "country": list(reversed(top["country"].tolist())),
+            # px.bar(orientation="h") はこのリストを y 軸で反転させるため、
+            # 登録件数の降順（＝summary の並び）をそのまま渡すと最多件数国が最上段になる。
+            "country": top["country"].tolist(),
             "category": list(_CATEGORY_COLORS_JA),
         },
         labels={"count": "登録件数", "country": "国 / 地域", "category": "分類"},

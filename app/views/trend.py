@@ -30,11 +30,11 @@ def _country_options() -> list[str]:
 
 
 @st.cache_data(show_spinner=False)
-def _yearly(country: str | None, cumulative: bool) -> pd.DataFrame:
-    return yearly_counts(_load_sites(), country=country, cumulative=cumulative)
+def _yearly(country: str | None) -> pd.DataFrame:
+    """累積の年次推移（分類内訳付き）。表示は常に累積なので cumulative 固定。"""
+    return yearly_counts(_load_sites(), country=country, cumulative=True)
 
 
-st.set_page_config(page_title="登録推移", page_icon="📈", layout="wide")
 st.title("世界遺産の登録数推移")
 
 try:
@@ -43,13 +43,7 @@ except (FileNotFoundError, ValueError) as exc:
     st.error(f"データの読み込みに失敗しました: {exc}")
     st.stop()
 
-controls = st.columns(3)
-with controls[0]:
-    scope = st.radio("集計対象", (_SCOPE_WORLD, _SCOPE_COUNTRY), horizontal=True)
-with controls[1]:
-    count_mode = st.radio("表示", ("年別", "累積"), horizontal=True)
-with controls[2]:
-    show_breakdown = st.toggle("分類の内訳を表示", value=False)
+scope = st.radio("集計対象", (_SCOPE_WORLD, _SCOPE_COUNTRY), horizontal=True)
 
 country: str | None = None
 if scope == _SCOPE_COUNTRY:
@@ -59,24 +53,17 @@ if scope == _SCOPE_COUNTRY:
     country = st.selectbox("国 / 地域を選択", options, index=index)
     st.session_state["selected_country"] = country
 
-cumulative = count_mode == "累積"
-yearly = _yearly(country, cumulative)
+yearly = _yearly(country)
 
 if not yearly.empty:
     first_year = int(yearly["year"].iloc[0])
     last_year = int(yearly["year"].iloc[-1])
-    metric_cols = st.columns(3)
+    metric_cols = st.columns(2)
     metric_cols[0].metric("対象期間", f"{first_year}–{last_year}")
-    if cumulative:
-        metric_cols[1].metric("登録件数（合計）", int(yearly["total"].iloc[-1]))
-    else:
-        metric_cols[1].metric("登録件数（合計）", int(yearly["total"].sum()))
-        peak = yearly.loc[yearly["total"].idxmax()]
-        metric_cols[2].metric(
-            "最多登録年", f"{int(peak['year'])}（{int(peak['total'])}件）"
-        )
+    metric_cols[1].metric("登録件数（累積）", int(yearly["total"].iloc[-1]))
 
-render_trend_chart(yearly, cumulative=cumulative, show_breakdown=show_breakdown)
+# 表示は常に累積・分類内訳あり。
+render_trend_chart(yearly, cumulative=True, show_breakdown=True)
 
 source_path = PARQUET_PATH if PARQUET_PATH.exists() else SAMPLE_CSV_PATH
 fetched_at = (
