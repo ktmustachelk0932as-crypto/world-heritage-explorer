@@ -9,6 +9,7 @@ import pandas as pd
 PROCESSED_DIR: Path = Path(__file__).resolve().parents[1] / "data" / "processed"
 PARQUET_PATH: Path = PROCESSED_DIR / "heritage_sites.parquet"
 SAMPLE_CSV_PATH: Path = PROCESSED_DIR / "heritage_sites_sample.csv"
+IMAGES_PARQUET_PATH: Path = PROCESSED_DIR / "heritage_images.parquet"
 
 REQUIRED_COLUMNS: tuple[str, ...] = (
     "site_id",
@@ -22,9 +23,23 @@ REQUIRED_COLUMNS: tuple[str, ...] = (
 )
 
 # 元データにあれば値を引き継ぎ、無ければ空文字で必ず用意する任意列。
-OPTIONAL_COLUMNS: tuple[str, ...] = ("criteria",)
+# wikidata_qid・image_filename は Wikidata から構築した parquet にのみ含まれる
+# （サンプル CSV には無いので空文字になる）。
+OPTIONAL_COLUMNS: tuple[str, ...] = ("criteria", "wikidata_qid", "image_filename")
 
 ALLOWED_CATEGORIES: frozenset[str] = frozenset({"Cultural", "Natural", "Mixed"})
+
+# 事前取得した代表画像スナップショット（scripts/prefetch_images.py が生成）の列。
+IMAGE_COLUMNS: tuple[str, ...] = (
+    "site_id",
+    "image_url",
+    "source_page_url",
+    "license_short_name",
+    "license_url",
+    "artist",
+    "attribution_required",
+    "retrieved_at",
+)
 
 
 def load_heritage_sites() -> pd.DataFrame:
@@ -82,6 +97,54 @@ def load_heritage_sites() -> pd.DataFrame:
             df[col] = ""
 
     return df.sort_values("site_id").reset_index(drop=True)
+
+
+def load_heritage_images() -> pd.DataFrame:
+    """事前取得済みの代表画像スナップショットを DataFrame として返す。
+
+    ``scripts/prefetch_images.py`` が生成する ``heritage_images.parquet`` を読み込む。
+    ファイルが無い場合（サンプルデータのみのローカル環境など）は、例外を投げずに
+    列 ``IMAGE_COLUMNS`` を持つ空の DataFrame を返す。
+
+    Returns:
+        1 行 = 1 遺産。``site_id`` は int、``attribution_required`` は bool、
+        その他の列は str。
+    """
+    if not IMAGES_PARQUET_PATH.exists():
+        return _empty_images_frame()
+
+    df = pd.read_parquet(IMAGES_PARQUET_PATH)
+    missing = [c for c in IMAGE_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"{IMAGES_PARQUET_PATH.name} に必須列がありません: {', '.join(missing)}"
+        )
+
+    df = df.loc[:, list(IMAGE_COLUMNS)].copy()
+    df = df[df["image_url"].notna() & (df["image_url"].astype(str) != "")]
+    df["site_id"] = pd.to_numeric(df["site_id"], errors="coerce")
+    df = df[df["site_id"].notna()].copy()
+    df["site_id"] = df["site_id"].astype(int)
+    df["attribution_required"] = df["attribution_required"].fillna(False).astype(bool)
+    for col in (
+        "image_url",
+        "source_page_url",
+        "license_short_name",
+        "license_url",
+        "artist",
+        "retrieved_at",
+    ):
+        df[col] = df[col].fillna("").astype(str)
+
+    return df.sort_values("site_id").reset_index(drop=True)
+
+
+def _empty_images_frame() -> pd.DataFrame:
+    """列だけ揃った空の画像スナップショット DataFrame。"""
+    df = pd.DataFrame({col: pd.Series(dtype="object") for col in IMAGE_COLUMNS})
+    df["site_id"] = df["site_id"].astype("int64")
+    df["attribution_required"] = df["attribution_required"].astype("bool")
+    return df
 
 
 def _resolve_source() -> Path:

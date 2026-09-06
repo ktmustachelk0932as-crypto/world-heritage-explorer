@@ -17,6 +17,7 @@ def _binding(
     country_label: str | None = None,
     iso: str | None = None,
     criteria: str | None = None,
+    image: str | None = None,
 ) -> dict:
     """SPARQL結果JSONの束縛（binding）1行分を模した辞書を組み立てる。"""
     row: dict = {
@@ -36,6 +37,10 @@ def _binding(
         row["isoCode"] = {"value": iso}
     if criteria is not None:
         row["criteriaLabel"] = {"value": criteria}
+    if image is not None:
+        row["image"] = {
+            "value": f"http://commons.wikimedia.org/wiki/Special:FilePath/{image}"
+        }
     return row
 
 
@@ -86,6 +91,7 @@ def test_component_sites_are_deduplicated_and_merged() -> None:
             country_label="Country A",
             iso="AA",
             criteria="(i)",
+            image="Main_Site.jpg",
         ),
         _binding(
             "Q10",
@@ -108,6 +114,7 @@ def test_component_sites_are_deduplicated_and_merged() -> None:
             country_label="Country B",
             iso="BB",
             criteria="(iii)",
+            image="Component.jpg",
         ),
     ]
 
@@ -116,10 +123,12 @@ def test_component_sites_are_deduplicated_and_merged() -> None:
     matched = df.loc[df["site_id"] == 1200]
     assert len(matched) == 1
     row = matched.iloc[0]
-    # 名称・座標は代表アイテム（枝番なしID="1200"のQ10）のもの。
+    # 名称・座標・画像・代表QIDは代表アイテム（枝番なしID="1200"のQ10）のもの。
     assert row["name"] == "Main Site"
     assert row["latitude"] == 20.0
     assert row["longitude"] == 10.0
+    assert row["wikidata_qid"] == "Q10"
+    assert row["image_filename"] == "Main_Site.jpg"
     # 国はグループ全体（Country A, Country B）のうちISOコード昇順で先頭。
     assert row["country"] == "Country A"
     assert row["iso_code"] == "AA"
@@ -230,6 +239,7 @@ def test_representative_fallback_when_no_bare_id_exists() -> None:
             country_label="Country A",
             iso="AA",
             criteria="(vii)",
+            image="Component_1.jpg",
         ),
         _binding(
             "Q40",
@@ -249,12 +259,61 @@ def test_representative_fallback_when_no_bare_id_exists() -> None:
     matched = df.loc[df["site_id"] == 1400]
     assert len(matched) == 1
     row = matched.iloc[0]
-    # QID最小（Q40）が名称・座標の代表として選ばれる。
+    # QID最小（Q40）が名称・座標・代表QIDとして選ばれる。
     assert row["name"] == "Component 2"
     assert row["latitude"] == 3.0
+    assert row["wikidata_qid"] == "Q40"
+    # 代表（Q40）に画像が無いので、グループ内の Q41 の画像で補われる。
+    assert row["image_filename"] == "Component_1.jpg"
     # 登録基準はグループ全体（(vii)と(viii)）を統合する。
     assert row["criteria"] == "(vii)(viii)"
     assert row["category"] == "Natural"
+
+
+def test_image_filename_from_p18_is_url_decoded() -> None:
+    """P18（Special:FilePath 形式）から取り出すファイル名は URL デコードされる。"""
+    bindings = [
+        _binding(
+            "Q70",
+            "Aachen Cathedral",
+            "3",
+            coord="Point(6.08 50.77)",
+            year=1978,
+            country_qid="Q183",
+            country_label="Germany",
+            iso="DE",
+            criteria="(i)",
+            image="Aachen%20Cathedral%20-%20interior.jpg",
+        ),
+    ]
+
+    df = build_dataframe(bindings)
+
+    row = df.loc[df["site_id"] == 3].iloc[0]
+    assert row["image_filename"] == "Aachen Cathedral - interior.jpg"
+
+
+def test_missing_p18_leaves_image_filename_empty_but_keeps_site() -> None:
+    """P18 が無い遺産は image_filename が空文字になるだけで、除外はされない。"""
+    bindings = [
+        _binding(
+            "Q80",
+            "No Image Site",
+            "800",
+            coord="Point(1.0 1.0)",
+            year=1990,
+            country_qid="Q1",
+            country_label="Country A",
+            iso="AA",
+            criteria="(ii)",
+        ),
+    ]
+
+    df = build_dataframe(bindings)
+
+    row = df.loc[df["site_id"] == 800].iloc[0]
+    assert row["image_filename"] == ""
+    assert row["wikidata_qid"] == "Q80"
 
 
 def test_output_schema_and_categories() -> None:

@@ -12,11 +12,15 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 
 import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from core.env import load_env_file
+from core.user_agent import build_user_agent
 
 LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +31,8 @@ WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 REQUEST_TIMEOUT_SECONDS: float = 90.0
 
 # P1435=遺産指定, Q9259=世界遺産, P757=WHC参照番号, P625=座標,
-# P17=国, P297=ISO 3166-1 alpha-2, P580=登録（開始）年, P2614=世界遺産登録基準
+# P17=国, P297=ISO 3166-1 alpha-2, P580=登録（開始）年, P2614=世界遺産登録基準,
+# P18=画像（Wikimedia Commons のファイル名。代表画像の取得に使う）
 #
 # P2614（登録基準）は、P1435文の修飾子（pq:）としてよりも、項目への直接ステートメント
 # （wdt:）として付与されている方が実際には多い（Wikidataの実データで確認済み：
@@ -54,52 +59,59 @@ SELECT ?item ?itemLabel ?whcId ?coord ?inscribedDate
 }
 """
 
+# 画像（P18）はメインクエリに含めると国×登録基準×画像の直積で結果が肥大化し、
+# WDQS のストリーミング上限（結果が途中で切れる）に達するため、別クエリで取得して
+# build_dataset.py 側で ?item / ?whcId をキーに突き合わせる。
+IMAGE_SPARQL_QUERY = """
+SELECT ?item ?whcId ?image WHERE {
+  ?item p:P1435 ?stmt .
+  ?stmt ps:P1435 wd:Q9259 .
+  ?stmt wikibase:rank ?rank .
+  FILTER(?rank != wikibase:DeprecatedRank)
+  ?item wdt:P757 ?whcId .
+  ?item wdt:P18 ?image .
+}
+"""
 
-def build_user_agent() -> str:
-    """Wikimediaの利用規約に沿い、連絡先を含むUser-Agentを組み立てる。
 
-    環境変数 WIKIMEDIA_CONTACT_EMAIL が未設定でも処理は継続する（警告ログのみ）。
-    """
-    contact = os.environ.get("WIKIMEDIA_CONTACT_EMAIL", "").strip()
-    if not contact:
-        LOGGER.warning(
-            "WIKIMEDIA_CONTACT_EMAIL が未設定です。"
-            "Wikimediaの利用規約では連絡先を含むUser-Agentが推奨されています。"
-        )
-        return "world-heritage-explorer/0.1 (no contact email set)"
-    return f"world-heritage-explorer/0.1 (contact: {contact})"
-
-
-def fetch_world_heritage_bindings() -> dict:
-    """WikidataのSPARQLエンドポイントへ問い合わせ、レスポンスJSONを返す。
-
-    Raises:
-        requests.HTTPError: HTTPエラーステータスが返った場合。
-        requests.Timeout: タイムアウトした場合。
-        RuntimeError: レスポンスに束縛データが含まれない場合。
-    """
+def _run_query(query: str, label: str) -> list[dict]:
+    """SPARQL を実行し ``results.bindings`` を返す。"""
     headers = {
         "User-Agent": build_user_agent(),
         "Accept": "application/sparql-results+json",
     }
-    LOGGER.info(
-        "Wikidata Query Serviceへ問い合わせています: %s", WIKIDATA_SPARQL_ENDPOINT
-    )
+    LOGGER.info("Wikidata Query Service へ問い合わせています（%s）", label)
     response = requests.get(
         WIKIDATA_SPARQL_ENDPOINT,
-        params={"query": SPARQL_QUERY, "format": "json"},
+        params={"query": query, "format": "json"},
         headers=headers,
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
-    payload = response.json()
-    bindings = payload.get("results", {}).get("bindings", [])
-    if not bindings:
+    bindings = response.json().get("results", {}).get("bindings", [])
+    LOGGER.info("取得件数（%s）: %d 行", label, len(bindings))
+    return bindings
+
+
+def fetch_world_heritage_bindings() -> dict:
+    """世界遺産の主データと画像（P18）を取得し、束縛行を結合した JSON を返す。
+
+    画像クエリの結果行（``item`` / ``whcId`` / ``image`` のみ）を主クエリの
+    束縛リストへ追記する。build_dataset.py の集約はキー欠損に強いので、
+    画像だけの行はそのまま画像情報の補完に使える。
+
+    Raises:
+        requests.HTTPError: HTTPエラーステータスが返った場合。
+        requests.Timeout: タイムアウトした場合。
+        RuntimeError: 主クエリの結果が空の場合。
+    """
+    main_bindings = _run_query(SPARQL_QUERY, "主データ")
+    if not main_bindings:
         raise RuntimeError(
             "SPARQLクエリの結果が空でした。クエリ内容を確認してください。"
         )
-    LOGGER.info("取得件数（構成資産・重複含む）: %d 行", len(bindings))
-    return payload
+    image_bindings = _run_query(IMAGE_SPARQL_QUERY, "画像 P18")
+    return {"results": {"bindings": [*main_bindings, *image_bindings]}}
 
 
 def save_raw_json(payload: dict, output_path: Path) -> None:
@@ -112,6 +124,7 @@ def save_raw_json(payload: dict, output_path: Path) -> None:
 
 
 def main() -> None:
+    load_env_file()
     payload = fetch_world_heritage_bindings()
     save_raw_json(payload, OUTPUT_PATH)
 

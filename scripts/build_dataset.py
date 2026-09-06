@@ -12,6 +12,8 @@ import logging
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
+from urllib.parse import unquote
 
 import pandas as pd
 
@@ -37,6 +39,8 @@ OUTPUT_PATH: Path = (
 _BARE_ID_RE = re.compile(r"^\d+$")
 _LEADING_DIGITS_RE = re.compile(r"^(\d+)")
 _COORD_RE = re.compile(r"^Point\(([-0-9.]+)\s+([-0-9.]+)\)$")
+# P18 の値は http://commons.wikimedia.org/wiki/Special:FilePath/<ファイル名> 形式。
+_FILEPATH_RE = re.compile(r"/Special:FilePath/(.+)$")
 
 # UNESCOの分類基準そのもの: (i)〜(vi)は文化遺産基準、(vii)〜(x)は自然遺産基準。
 _CRITERIA_ORDER: tuple[str, ...] = (
@@ -71,10 +75,19 @@ class _ItemRecord:
         self.years: set[int] = set()
         self.countries: set[tuple[str, str]] = set()
         self.criteria: set[str] = set()
+        self.image_filename: str | None = None
 
 
 def _qid_from_uri(uri: str) -> str:
     return uri.rsplit("/", 1)[-1]
+
+
+def _filename_from_image_uri(uri: str) -> str | None:
+    """P18 の Commons URI から Wikimedia Commons のファイル名を取り出す。"""
+    match = _FILEPATH_RE.search(uri)
+    if not match:
+        return None
+    return unquote(match.group(1))
 
 
 def _parse_coord(wkt: str) -> tuple[float, float] | None:
@@ -113,6 +126,11 @@ def _aggregate_by_item(raw_bindings: list[dict]) -> dict[str, _ItemRecord]:
                 parsed = _parse_coord(coord)
                 if parsed:
                     record.latitude, record.longitude = parsed
+
+        if record.image_filename is None:
+            image_uri = row.get("image", {}).get("value")
+            if image_uri:
+                record.image_filename = _filename_from_image_uri(image_uri)
 
         date_raw = row.get("inscribedDate", {}).get("value")
         if date_raw:
@@ -162,22 +180,35 @@ def _ordered_group_qids(
     return sorted(qids), True
 
 
-def _merge_group(
-    qids: list[str], items: dict[str, _ItemRecord]
-) -> tuple[
-    str | None, float | None, float | None, int | None, set[tuple[str, str]], set[str]
-]:
+class _MergedSite(NamedTuple):
+    """グループ（遺産1件）を統合した結果。"""
+
+    name: str | None
+    latitude: float | None
+    longitude: float | None
+    year: int | None
+    countries: set[tuple[str, str]]
+    criteria: set[str]
+    wikidata_qid: str | None
+    image_filename: str | None
+
+
+def _merge_group(qids: list[str], items: dict[str, _ItemRecord]) -> _MergedSite:
     """代表アイテムを優先しつつ、グループ内の全アイテムから欠損項目を補って統合する。
 
     国・登録基準・登録年の候補はグループ全体の和集合を取る（複合遺産の構成資産側にしか
-    タグ付けされていない場合があるため）。名称・座標は先頭（代表）から順に見て
+    タグ付けされていない場合があるため）。名称・座標・画像は先頭（代表）から順に見て
     最初に見つかった非欠損値を採用する。登録年は候補の中から1978年（世界遺産条約に
     基づく最初の登録年）以降の最小値を採る（Wikidataの誤記載による無関係な日付を除外
     するため）。1978年以降の候補が一つも無ければ欠損として扱う。
+
+    ``wikidata_qid`` は先頭（代表）アイテムの QID。Commons ファイルページへの
+    リンクやデバッグ用に保持する。
     """
     name: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    image_filename: str | None = None
     years: set[int] = set()
     countries: set[tuple[str, str]] = set()
     criteria: set[str] = set()
@@ -189,6 +220,8 @@ def _merge_group(
         if latitude is None and record.latitude is not None:
             latitude = record.latitude
             longitude = record.longitude
+        if image_filename is None and record.image_filename is not None:
+            image_filename = record.image_filename
         years |= record.years
         countries |= record.countries
         criteria |= record.criteria
@@ -202,7 +235,17 @@ def _merge_group(
             sorted(years),
         )
 
-    return name, latitude, longitude, year, countries, criteria
+    representative_qid = qids[0] if qids else None
+    return _MergedSite(
+        name,
+        latitude,
+        longitude,
+        year,
+        countries,
+        criteria,
+        representative_qid,
+        image_filename,
+    )
 
 
 def _derive_category(criteria: set[str]) -> str | None:
@@ -261,9 +304,13 @@ def build_dataframe(raw_bindings: list[dict]) -> pd.DataFrame:
         if used_fallback:
             fallback_count += 1
 
-        name, latitude, longitude, year, countries, criteria = _merge_group(
-            ordered_qids, items
-        )
+        merged = _merge_group(ordered_qids, items)
+        name = merged.name
+        latitude = merged.latitude
+        longitude = merged.longitude
+        year = merged.year
+        countries = merged.countries
+        criteria = merged.criteria
 
         category = _derive_category(criteria)
         if (
@@ -289,6 +336,8 @@ def build_dataframe(raw_bindings: list[dict]) -> pd.DataFrame:
                 "latitude": latitude,
                 "longitude": longitude,
                 "criteria": _sorted_criteria_string(criteria),
+                "wikidata_qid": merged.wikidata_qid or "",
+                "image_filename": merged.image_filename or "",
             }
         )
 
