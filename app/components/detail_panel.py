@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from app.components.map_view import CATEGORY_LABELS_JA
+from core.criteria import describe_criteria
 
 _UNESCO_SITE_URL = "https://whc.unesco.org/en/list/{site_id}"
 
@@ -47,6 +48,8 @@ def render_detail_panel(
     st.markdown(f"**分類**: {category}")
     if criteria:
         st.markdown(f"**登録基準**: {criteria}")
+        for token, description in describe_criteria(criteria):
+            st.caption(f"{token} {description}")
 
     site_id = int(site["site_id"])
     st.markdown(f"[UNESCO 公式ページ]({_UNESCO_SITE_URL.format(site_id=site_id)})")
@@ -83,10 +86,16 @@ def _credit_line(image: pd.Series | Mapping[str, Any] | None) -> str:
         parts.append(
             f"[{license_name}]({license_url})" if license_url else license_name
         )
-    credit = " / ".join(parts) if parts else "出典: Wikimedia Commons"
+
+    if parts:
+        credit = " / ".join(parts)
+        if source_url:
+            credit += f"（[Wikimedia Commons]({source_url})）"
+        return credit
+    # 作者名・ライセンス名が無い場合は出典表記を二重に出さない。
     if source_url:
-        credit += f"（[Wikimedia Commons]({source_url})）"
-    return credit
+        return f"出典: [Wikimedia Commons]({source_url})"
+    return "出典: Wikimedia Commons"
 
 
 def _value(image: pd.Series | Mapping[str, Any] | None, key: str) -> Any:

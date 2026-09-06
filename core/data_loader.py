@@ -6,6 +6,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from core.country_names import localize_country
+from core.image_fetcher import sanitize_artist
+from core.site_names_ja import SITE_NAMES_JA
+
 PROCESSED_DIR: Path = Path(__file__).resolve().parents[1] / "data" / "processed"
 PARQUET_PATH: Path = PROCESSED_DIR / "heritage_sites.parquet"
 SAMPLE_CSV_PATH: Path = PROCESSED_DIR / "heritage_sites_sample.csv"
@@ -96,7 +100,28 @@ def load_heritage_sites() -> pd.DataFrame:
         else:
             df[col] = ""
 
+    df = _localize_japanese(df)
     return df.sort_values("site_id").reset_index(drop=True)
+
+
+def _localize_japanese(df: pd.DataFrame) -> pd.DataFrame:
+    """表示用に ``country`` を和名へ、``name`` を日本語ラベルの無い遺産だけ対訳へ差し替える。
+
+    ``name`` は ``scripts/build_dataset.py`` が既に日本語ラベル優先で付けているため、
+    ここでは Wikidata に日本語ラベルが無く英語名のまま残った分を ``SITE_NAMES_JA``
+    （``site_id`` キー）で補完する。``country`` は ``iso_code`` から和名へ引き直す
+    （未知コードは英語名のまま）。
+    """
+    df = df.copy()
+    df["country"] = [
+        localize_country(iso, name)
+        for iso, name in zip(df["iso_code"], df["country"], strict=True)
+    ]
+    df["name"] = [
+        SITE_NAMES_JA.get(int(site_id), name)
+        for site_id, name in zip(df["site_id"], df["name"], strict=True)
+    ]
+    return df
 
 
 def load_heritage_images() -> pd.DataFrame:
@@ -135,6 +160,10 @@ def load_heritage_images() -> pd.DataFrame:
         "retrieved_at",
     ):
         df[col] = df[col].fillna("").astype(str)
+
+    # 事前取得スナップショットには作者名にライセンス定型文が紛れ込んだ行がある
+    # （取得側は修正済みだが再生成はしないため、読み込み時に整える）。
+    df["artist"] = df["artist"].map(sanitize_artist)
 
     return df.sort_values("site_id").reset_index(drop=True)
 

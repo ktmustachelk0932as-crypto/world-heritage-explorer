@@ -7,7 +7,11 @@ import requests
 from tenacity import wait_none
 
 from core import image_fetcher
-from core.image_fetcher import MAX_ATTEMPTS, fetch_commons_image_info
+from core.image_fetcher import (
+    MAX_ATTEMPTS,
+    fetch_commons_image_info,
+    sanitize_artist,
+)
 
 
 class _FakeResponse:
@@ -195,3 +199,49 @@ def test_public_domain_without_license_url_is_allowed(
     info = fetch_commons_image_info("Old.jpg")
 
     assert info.status == "ok"
+
+
+_PD_BOILERPLATE = (
+    "Public domain Public domain false false I, the copyright holder of "
+    "this work, release this work into the public domain . This applies "
+    "worldwide."
+)
+_ASSUMED_AUTHOR = (
+    "No machine-readable author provided. Dom2002 assumed (based on copyright claims)."
+)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ('<a href="//x">Jane&nbsp;Doe</a>', "Jane Doe"),
+        ("CEphoto, Uwe Aranas", "CEphoto, Uwe Aranas"),
+        ("", ""),
+        (_PD_BOILERPLATE, ""),
+        (_ASSUMED_AUTHOR, "Dom2002"),
+        ("Unknown author", ""),
+    ],
+)
+def test_sanitize_artist(raw: str, expected: str) -> None:
+    assert sanitize_artist(raw) == expected
+
+
+def test_ok_image_sanitizes_boilerplate_artist(
+    monkeypatch: pytest.MonkeyPatch, calls: list
+) -> None:
+    payload = _imageinfo_payload(
+        _meta(
+            License="pd",
+            LicenseShortName="Public domain",
+            Artist=(
+                "No machine-readable author provided. Foo assumed "
+                "(based on copyright claims)."
+            ),
+        )
+    )
+    _install(monkeypatch, calls, lambda _n: _FakeResponse(payload=payload))
+
+    info = fetch_commons_image_info("Old.jpg")
+
+    assert info.status == "ok"
+    assert info.artist == "Foo"

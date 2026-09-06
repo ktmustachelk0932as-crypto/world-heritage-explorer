@@ -95,3 +95,43 @@ def test_load_heritage_images_reads_and_coerces_snapshot(
     assert df["site_id"].dtype == "int64"
     assert df["attribution_required"].dtype == "bool"
     assert df.iloc[0]["license_short_name"] == "CC BY-SA 4.0"
+    assert df.iloc[0]["artist"] == "Someone"  # 通常の作者名は素通し
+
+
+def test_load_heritage_images_sanitizes_boilerplate_artist(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    path = tmp_path / "heritage_images.parquet"
+    pd.DataFrame(
+        {
+            "site_id": ["1"],
+            "image_url": ["https://example.org/x.jpg"],
+            "source_page_url": [""],
+            "license_short_name": ["Public domain"],
+            "license_url": [""],
+            "artist": [
+                (
+                    "Public domain Public domain false false I, the copyright "
+                    "holder of this work, release this work into the public "
+                    "domain ."
+                )
+            ],
+            "attribution_required": [False],
+            "retrieved_at": ["2026-09-06T00:00:00+00:00"],
+        }
+    ).to_parquet(path, index=False)
+    monkeypatch.setattr(data_loader, "IMAGES_PARQUET_PATH", path)
+
+    df = load_heritage_images()
+
+    assert df.iloc[0]["artist"] == ""
+
+
+def test_load_heritage_sites_localises_country_and_name() -> None:
+    import re
+
+    jp_re = re.compile(r"[぀-ゟ゠-ヿ㐀-鿿豈-﫿]")
+    df = load_heritage_sites()
+    assert all(jp_re.search(str(c)) for c in df["country"].unique())
+    assert all(jp_re.search(str(n)) for n in df["name"])

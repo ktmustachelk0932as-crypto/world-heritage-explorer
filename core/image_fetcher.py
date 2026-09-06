@@ -67,6 +67,30 @@ _RESTRICTED_LICENSE_MARKERS: tuple[str, ...] = (
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 
+# Commons の ``Artist`` extmetadata には、作者名ではなくライセンス定型文や
+# 「作者不明」系の常套句がそのまま入っていることがある。クレジット表示に
+# 出すと崩れるので作者名として扱わず捨てる。
+_ARTIST_BOILERPLATE_MARKERS: tuple[str, ...] = (
+    "copyright holder of this work",
+    "this applies worldwide",
+    "public domain",
+    "released into the public domain",
+    "own work",
+    "unknown author",
+    "unknown photographer",
+    "not provided",
+    "no machine-readable author",
+    "see source",
+    "see below",
+    "anonymous",
+)
+# 「X assumed (based on copyright claims).」から投稿者名 X だけを取り出す。
+_ASSUMED_AUTHOR_RE = re.compile(
+    r"([^\s.]+(?:\s[^\s.]+)?)\s+assumed\s*\(based on copyright claims\)",
+    re.IGNORECASE,
+)
+_ARTIST_MAX_LEN: int = 120
+
 ImageStatus = Literal["ok", "no_image", "excluded_license", "fetch_failed"]
 
 
@@ -153,7 +177,7 @@ def fetch_commons_image_info(filename: str) -> ImageInfo:
         or info.get("descriptionurl", ""),
         license_short_name=license_short,
         license_url=license_url,
-        artist=_strip_html(_meta_value(meta, "Artist")),
+        artist=sanitize_artist(_meta_value(meta, "Artist")),
         attribution_required=_meta_value(meta, "AttributionRequired").lower() == "true",
     )
 
@@ -207,3 +231,27 @@ def _strip_html(raw: str) -> str:
     if not raw:
         return ""
     return _WS_RE.sub(" ", html.unescape(_TAG_RE.sub(" ", raw))).strip()
+
+
+def sanitize_artist(raw: str) -> str:
+    """``Artist`` extmetadata を作者名として使える文字列に整える。
+
+    タグを除いたうえで、ライセンス定型文・「作者不明」系の常套句が混ざっている
+    場合は空文字にする。「X assumed (based on copyright claims).」形式は投稿者名 X
+    だけを残す。極端に長い値（テンプレート丸ごと）は空にする。通常の人名・団体名は
+    そのまま返す。
+    """
+    text = _strip_html(raw)
+    if not text:
+        return ""
+
+    assumed = _ASSUMED_AUTHOR_RE.search(text)
+    if assumed:
+        return assumed.group(1).strip(" .,")
+
+    lowered = text.lower()
+    if any(marker in lowered for marker in _ARTIST_BOILERPLATE_MARKERS):
+        return ""
+    if len(text) > _ARTIST_MAX_LEN:
+        return ""
+    return text
