@@ -1,4 +1,4 @@
-"""UNESCO World Heritage List・国土数値情報の読み込みと整形。"""
+"""Wikidata から構築した世界遺産データセット（parquet）の読み込みと整形。"""
 
 from __future__ import annotations
 
