@@ -68,6 +68,13 @@ def test_map_uses_openstreetmap_without_wrapping() -> None:
 def test_map_disables_clustering_at_focus_zoom() -> None:
     html = build_map(_SAMPLE).get_root().render()
     assert f'"disableClusteringAtZoom": {CLUSTER_DISABLE_ZOOM}' in html
+
+
+def test_map_disables_keyboard_handler() -> None:
+    # Leaflet のキーボードハンドラが mousedown で focus() を呼ぶと、iframe が画面内へ
+    # スクロールして 1 回目のマーカークリックが成立しなくなるため無効化している。
+    html = build_map(_SAMPLE).get_root().render()
+    assert '"keyboard": false' in html
     assert "worldCopyJump" not in html
 
 

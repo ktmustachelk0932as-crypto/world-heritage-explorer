@@ -70,6 +70,12 @@ def build_map(df: pd.DataFrame) -> folium.Map:
         max_bounds=True,
         tiles=None,
         control_scale=True,
+        # Leaflet のキーボード操作ハンドラは mousedown のたびに地図コンテナへ
+        # focus() を呼ぶ。地図 iframe の下端が画面外にあると、そのフォーカスで
+        # 親ページが iframe を画面内へスクロールさせ、mousedown と mouseup の
+        # 位置がずれて 1 回目のマーカークリックが成立しない（2 回押す必要が
+        # 出る）。矢印キーでのパン操作は不要なので無効化する。
+        keyboard=False,
     )
     # OpenStreetMap（キー不要・カラー・帰属表示自動）。no_wrap で東西の無限リピート、
     # min_zoom で世界地図が複数枚並ぶズームレベルへの縮小を止める。
