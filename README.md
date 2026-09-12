@@ -1,5 +1,7 @@
 # world-heritage-explorer
 
+[![CI](https://github.com/ktmustachelk0932as-crypto/world-heritage-explorer/actions/workflows/ci.yml/badge.svg)](https://github.com/ktmustachelk0932as-crypto/world-heritage-explorer/actions/workflows/ci.yml)
+
 世界遺産の分布・登録動向を可視化する Streamlit アプリです。
 Wikidata（SPARQL）から構築した世界遺産データセットを元に、インタラクティブ地図・国別サマリー・年次登録推移を表示します。
 
@@ -191,6 +193,14 @@ pytest                 # 全テスト
 ruff format .          # フォーマット
 ruff check .           # Lint
 ```
+
+コミット前に自動で ruff を実行するには、初回のみ pre-commit フックを有効化します。
+
+```bash
+uv run pre-commit install
+```
+
+push / PR 時は GitHub Actions（`.github/workflows/ci.yml`）で同じ Lint・フォーマットチェック・pytest が実行されます。
 
 テストは `core/` のロジック、`app/components/` の描画関数、`scripts/build_dataset.py` の変換処理、
 ページナビゲーションを対象にしています。

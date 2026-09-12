@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # uv.lock を厳密に使用し、CI 上で勝手に更新しない
+  UV_FROZEN: "1"
+  STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      # pyproject.toml と uv.lock の整合性を検証
+      - run: uv lock --check
+      - run: uv sync --group dev
+      - run: uv run ruff format --check .
+      # PR の差分行にアノテーションとして表示
+      - run: uv run ruff check . --output-format=github
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - run: uv sync --group dev
+      # tests/__init__.py と AppTest の cwd 依存のため、リポジトリルートで実行する
+      - run: uv run pytest
