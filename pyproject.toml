@@ -9,16 +9,21 @@ dependencies = [
     "folium>=0.20,<1",
     "plotly>=7.0,<8",
     "pandas>=3.0,<4",
-    "geopandas>=1.1,<2",
     "requests>=2.34,<3",
     "tenacity>=9.1,<10",
+    "pyarrow>=25.0,<26",
 ]
 
 [dependency-groups]
 dev = [
     "ruff>=0.16,<1",
     "pytest>=9.1,<10",
+    "pre-commit>=4.0,<5",
 ]
 
 [tool.uv]
 package = false
+
+[tool.ruff.lint.per-file-ignores]
+# Streamlit エントリーはインポート前に sys.path を調整するため E402 を許容する
+"app/main.py" = ["E402"]
