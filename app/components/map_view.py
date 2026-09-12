@@ -8,6 +8,8 @@ import folium
 import pandas as pd
 from folium.plugins import MarkerCluster
 
+from core.aggregations import CATEGORY_COLUMNS
+
 CATEGORY_MARKER_COLORS: dict[str, str] = {
     "Cultural": "blue",
     "Natural": "green",
@@ -28,35 +30,38 @@ CATEGORY_HEX_COLORS: dict[str, str] = {
     "Mixed": "#9467bd",
 }
 
+# 集計列（cultural/natural/mixed）→ 日本語ラベル。グラフの表記を地図の凡例と合わせる。
+CATEGORY_COLUMN_LABELS_JA: dict[str, str] = {
+    CATEGORY_COLUMNS[key]: label for key, label in CATEGORY_LABELS_JA.items()
+}
+
+# 日本語ラベル → hex 色。Plotly の color_discrete_map 用。
+CATEGORY_COLORS_BY_LABEL_JA: dict[str, str] = {
+    CATEGORY_LABELS_JA[key]: color for key, color in CATEGORY_HEX_COLORS.items()
+}
+
 _DEFAULT_CENTER: tuple[float, float] = (20.0, 0.0)
 _DEFAULT_ZOOM: int = 2
 # これ以上引くと世界地図が複数枚並ぶ（タイルの水平リピート）ため下限を設ける。
 _MIN_ZOOM: int = 2
-# 検索などで特定サイトへ寄せるときのズーム。
-_FOCUS_ZOOM: int = 6
 
 # クリック座標とマーカー座標を突き合わせる際の許容誤差（度）。
 _COORD_TOLERANCE: float = 1e-6
 
 
-def build_map(
-    df: pd.DataFrame, *, focus: tuple[float, float] | None = None
-) -> folium.Map:
+def build_map(df: pd.DataFrame) -> folium.Map:
     """世界遺産サイトをマーカー表示した folium 地図を組み立てる。
 
     Args:
         df: ``core.data_loader.load_heritage_sites`` が返す形式の DataFrame。
-        focus: ``(緯度, 経度)`` を渡すとその地点を中心に寄せて表示する
-            （検索で特定サイトを選んだとき用）。``None`` なら全体表示。
 
     Returns:
         マーカー（分類ごとに色分け・クラスタリング）を載せた ``folium.Map``。
+        表示位置の変更（検索でのフォーカス等）は ``st_folium`` の center/zoom で行う。
     """
-    center = list(focus) if focus is not None else list(_DEFAULT_CENTER)
-    zoom = _FOCUS_ZOOM if focus is not None else _DEFAULT_ZOOM
     fmap = folium.Map(
-        location=center,
-        zoom_start=zoom,
+        location=list(_DEFAULT_CENTER),
+        zoom_start=_DEFAULT_ZOOM,
         min_zoom=_MIN_ZOOM,
         max_bounds=True,
         tiles=None,

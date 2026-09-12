@@ -26,10 +26,7 @@ sites = pd.DataFrame(
     columns=list(REQUIRED_COLUMNS),
 )
 
-render_trend_chart(yearly_counts(sites), cumulative=False, show_breakdown=False)
-render_trend_chart(
-    yearly_counts(sites, cumulative=True), cumulative=True, show_breakdown=True
-)
+render_trend_chart(yearly_counts(sites, cumulative=True))
 """
 
 _EMPTY_SCRIPT = """
@@ -45,7 +42,7 @@ from core.aggregations import yearly_counts
 from core.data_loader import REQUIRED_COLUMNS
 
 empty = pd.DataFrame(columns=list(REQUIRED_COLUMNS))
-render_trend_chart(yearly_counts(empty), cumulative=False, show_breakdown=False)
+render_trend_chart(yearly_counts(empty, cumulative=True))
 """
 
 

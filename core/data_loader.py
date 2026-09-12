@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -77,10 +78,9 @@ def load_heritage_sites() -> pd.DataFrame:
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
     df["date_inscribed"] = pd.to_numeric(df["date_inscribed"], errors="coerce")
 
+    # between は NaN に対して False を返すため、緯度経度の欠損もここで落ちる。
     valid = (
-        df["latitude"].notna()
-        & df["longitude"].notna()
-        & df["date_inscribed"].notna()
+        df["date_inscribed"].notna()
         & df["latitude"].between(-90, 90)
         & df["longitude"].between(-180, 180)
         & df["category"].isin(ALLOWED_CATEGORIES)
@@ -174,6 +174,12 @@ def _empty_images_frame() -> pd.DataFrame:
     df["site_id"] = df["site_id"].astype("int64")
     df["attribution_required"] = df["attribution_required"].astype("bool")
     return df
+
+
+def data_fetched_date() -> str:
+    """読み込み元データファイルの更新日（ローカル日付 ``YYYY-MM-DD``）を返す。"""
+    mtime = _resolve_source().stat().st_mtime
+    return datetime.fromtimestamp(mtime, tz=UTC).astimezone().strftime("%Y-%m-%d")
 
 
 def _resolve_source() -> Path:

@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import os
-import sys
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from datetime import timedelta
 
 import pandas as pd
 import streamlit as st
@@ -20,12 +16,8 @@ from app.components.map_view import (
     build_map,
     find_site_by_coordinates,
 )
-from core.data_loader import (
-    PARQUET_PATH,
-    SAMPLE_CSV_PATH,
-    load_heritage_images,
-    load_heritage_sites,
-)
+from app.components.page_common import load_sites_or_stop, render_data_notes
+from core.data_loader import data_fetched_date, load_heritage_images
 from core.env import load_env_file
 from core.image_fetcher import fetch_commons_image_info
 
@@ -38,6 +30,20 @@ _FOCUS_KEY = "map_focus_center"
 _MAP_WIDGET_KEY = "heritage_map"
 _FOCUS_ZOOM = 6
 
+_DATA_NOTES = (
+    (
+        "実際の世界遺産登録数と完全には一致しない場合があります"
+        "（データ取得元の制約により一部の遺産が含まれていません）"
+    ),
+    "複数地点にまたがる遺産は代表1地点の座標で表示しています",
+    "複数国にまたがる遺産（越境遺産）は代表1か国のみを表示しています",
+    "登録年は初回登録年のみを表示しており、後年の登録範囲の拡張・変更は反映していません",
+    (
+        "座標・分類（文化遺産/自然遺産/複合遺産）はWikidataの情報を基に算出しており、"
+        "UNESCO公式データと差異がある場合があります"
+    ),
+)
+
 # フォールバック取得の User-Agent 用に、.env / secrets の連絡先を環境変数へ渡す。
 load_env_file()
 # secrets.toml が無い環境では st.secrets へのアクセス自体が例外になるため握りつぶす。
@@ -49,12 +55,6 @@ if _contact:
     os.environ.setdefault("WIKIMEDIA_CONTACT_EMAIL", _contact)
 
 
-@st.cache_data(show_spinner=False)
-def _load_sites() -> pd.DataFrame:
-    """世界遺産サイト一覧（ページ再実行・ページ遷移をまたいでキャッシュ）。"""
-    return load_heritage_sites()
-
-
 @st.cache_data(ttl=timedelta(days=30), show_spinner=False)
 def _load_images() -> pd.DataFrame:
     """事前取得済み画像スナップショット（無ければ空 DataFrame）。"""
@@ -63,7 +63,7 @@ def _load_images() -> pd.DataFrame:
 
 # 地図は st_folium に渡すたびに内部で ``render()`` され _id 等が書き換わるため、
 # @st.cache_resource で使い回すと 2 回目以降クリックイベントが取れなくなる。毎回
-# build_map で作り直す（重いデータ読込は _load_sites 側でキャッシュ済み）。
+# build_map で作り直す（重いデータ読込は load_sites_cached 側でキャッシュ済み）。
 # 固定 key を付けているので、地図の pan/zoom や last_object_clicked は再実行を
 # またいで保持される。検索での再センタリングは st_folium の center/zoom で行う。
 
@@ -97,23 +97,13 @@ def _image_for(site: pd.Series, images: pd.DataFrame) -> object | None:
 
 st.title("世界遺産マップ")
 
-try:
-    sites = _load_sites()
-except (FileNotFoundError, ValueError) as exc:
-    st.error(f"データの読み込みに失敗しました: {exc}")
-    st.stop()
+sites = load_sites_or_stop()
 
 # クリアボタンが押された直後の実行では、検索ボックスの選択もリセットする
 # （ウィジェット生成前に session_state を書き換える必要がある）。
 if st.session_state.pop(_CLEAR_FLAG_KEY, False):
     st.session_state[_SEARCH_WIDGET_KEY] = None
 
-source_path = PARQUET_PATH if PARQUET_PATH.exists() else SAMPLE_CSV_PATH
-fetched_at = (
-    datetime.fromtimestamp(source_path.stat().st_mtime, tz=UTC)
-    .astimezone()
-    .strftime("%Y-%m-%d")
-)
 _site_labels = {
     int(row.site_id): f"{row.name}（{row.country}）"
     for row in sites.itertuples(index=False)
@@ -137,17 +127,8 @@ with map_col:
     )
     st.markdown(legend, unsafe_allow_html=True)
 
-    st.caption(f"{len(sites)} 件を表示（データ取得日: {fetched_at}）")
-    with st.expander("※ データについての注記"):
-        st.markdown(
-            "- 実際の世界遺産登録数と完全には一致しない場合があります"
-            "（データ取得元の制約により一部の遺産が含まれていません）\n"
-            "- 複数地点にまたがる遺産は代表1地点の座標で表示しています\n"
-            "- 複数国にまたがる遺産（越境遺産）は代表1か国のみを表示しています\n"
-            "- 登録年は初回登録年のみを表示しており、後年の登録範囲の拡張・変更は反映していません\n"
-            "- 座標・分類（文化遺産/自然遺産/複合遺産）はWikidataの情報を基に算出しており、"
-            "UNESCO公式データと差異がある場合があります"
-        )
+    st.caption(f"{len(sites)} 件を表示（データ取得日: {data_fetched_date()}）")
+    render_data_notes(_DATA_NOTES)
 
     # 検索で特定サイトを選んだら、その地点へ地図を寄せる。フォーカスはマーカーを
     # クリックするまで維持する（クリック処理側で解除）。

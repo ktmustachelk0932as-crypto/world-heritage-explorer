@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import unquote
@@ -64,19 +65,19 @@ _NATURAL_CRITERIA = frozenset(_CRITERIA_ORDER[6:])
 _FIRST_INSCRIPTION_YEAR = 1978
 
 
+@dataclass
 class _ItemRecord:
     """Wikidata項目（QID）1件分の集約結果。"""
 
-    def __init__(self) -> None:
-        self.whc_id_raw: str | None = None
-        self.name: str | None = None
-        self.name_ja: str | None = None
-        self.latitude: float | None = None
-        self.longitude: float | None = None
-        self.years: set[int] = set()
-        self.countries: set[tuple[str, str]] = set()
-        self.criteria: set[str] = set()
-        self.image_filename: str | None = None
+    whc_id_raw: str | None = None
+    name: str | None = None
+    name_ja: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    years: set[int] = field(default_factory=set)
+    countries: set[tuple[str, str]] = field(default_factory=set)
+    criteria: set[str] = field(default_factory=set)
+    image_filename: str | None = None
 
 
 def _qid_from_uri(uri: str) -> str:
@@ -244,17 +245,16 @@ def _merge_group(qids: list[str], items: dict[str, _ItemRecord]) -> _MergedSite:
             sorted(years),
         )
 
-    representative_qid = qids[0] if qids else None
     return _MergedSite(
-        name,
-        name_ja,
-        latitude,
-        longitude,
-        year,
-        countries,
-        criteria,
-        representative_qid,
-        image_filename,
+        name=name,
+        name_ja=name_ja,
+        latitude=latitude,
+        longitude=longitude,
+        year=year,
+        countries=countries,
+        criteria=criteria,
+        wikidata_qid=qids[0] if qids else None,
+        image_filename=image_filename,
     )
 
 
@@ -318,25 +318,20 @@ def build_dataframe(raw_bindings: list[dict]) -> pd.DataFrame:
         # 表示は日本語名を優先し、Wikidata に日本語ラベルが無い遺産は英語名にフォールバック
         # する（残りは core/site_names_ja.py の対訳辞書で補完）。
         name = merged.name_ja or merged.name
-        latitude = merged.latitude
-        longitude = merged.longitude
-        year = merged.year
-        countries = merged.countries
-        criteria = merged.criteria
 
-        category = _derive_category(criteria)
+        category = _derive_category(merged.criteria)
         if (
             category is None
-            or latitude is None
-            or longitude is None
-            or year is None
+            or merged.latitude is None
+            or merged.longitude is None
+            or merged.year is None
             or name is None
-            or not countries
+            or not merged.countries
         ):
             dropped_count += 1
             continue
 
-        iso_code, country_label = _select_country(countries)
+        iso_code, country_label = _select_country(merged.countries)
         rows.append(
             {
                 "site_id": int(canonical_id),
@@ -344,10 +339,10 @@ def build_dataframe(raw_bindings: list[dict]) -> pd.DataFrame:
                 "country": country_label,
                 "iso_code": iso_code,
                 "category": category,
-                "date_inscribed": year,
-                "latitude": latitude,
-                "longitude": longitude,
-                "criteria": _sorted_criteria_string(criteria),
+                "date_inscribed": merged.year,
+                "latitude": merged.latitude,
+                "longitude": merged.longitude,
+                "criteria": _sorted_criteria_string(merged.criteria),
                 "wikidata_qid": merged.wikidata_qid or "",
                 "image_filename": merged.image_filename or "",
             }

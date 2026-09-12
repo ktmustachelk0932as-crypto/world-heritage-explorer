@@ -2,12 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-from datetime import UTC, datetime
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
 import pandas as pd
 import streamlit as st
 
@@ -16,55 +10,48 @@ from app.components.country_summary import (
     render_country_detail,
 )
 from app.components.map_view import CATEGORY_LABELS_JA
-from core.aggregations import count_by_category, summarize_by_country
-from core.data_loader import PARQUET_PATH, SAMPLE_CSV_PATH, load_heritage_sites
+from app.components.page_common import (
+    load_sites_cached,
+    load_sites_or_stop,
+    render_data_notes,
+)
+from core.aggregations import CATEGORY_KEYS, count_by_category, summarize_by_country
+from core.data_loader import data_fetched_date
 
 _SELECTED_COUNTRY_KEY = "selected_country"
 
-
-@st.cache_data(show_spinner=False)
-def _load_sites() -> pd.DataFrame:
-    return load_heritage_sites()
+_DATA_NOTES = (
+    (
+        "実際の世界遺産登録数と完全には一致しない場合があります"
+        "（データ取得元の制約により一部の遺産が含まれていません）"
+    ),
+    "複数国にまたがる遺産（越境遺産）は代表1か国のみで集計しています",
+    (
+        "分類（文化遺産/自然遺産/複合遺産）はWikidataの情報を基に算出しており、"
+        "UNESCO公式データと差異がある場合があります"
+    ),
+)
 
 
 @st.cache_data(show_spinner=False)
 def _summary() -> pd.DataFrame:
-    return summarize_by_country(_load_sites())
+    return summarize_by_country(load_sites_cached())
 
 
 st.title("国別サマリー")
 
-try:
-    sites = _load_sites()
-except (FileNotFoundError, ValueError) as exc:
-    st.error(f"データの読み込みに失敗しました: {exc}")
-    st.stop()
-
+sites = load_sites_or_stop()
 summary = _summary()
 
 by_category = count_by_category(sites)
 metric_cols = st.columns(5)
 metric_cols[0].metric("対象国 / 地域数", len(summary))
 metric_cols[1].metric("登録件数（合計）", len(sites))
-metric_cols[2].metric(CATEGORY_LABELS_JA["Cultural"], by_category["Cultural"])
-metric_cols[3].metric(CATEGORY_LABELS_JA["Natural"], by_category["Natural"])
-metric_cols[4].metric(CATEGORY_LABELS_JA["Mixed"], by_category["Mixed"])
+for col, key in zip(metric_cols[2:], CATEGORY_KEYS, strict=True):
+    col.metric(CATEGORY_LABELS_JA[key], by_category[key])
 
-source_path = PARQUET_PATH if PARQUET_PATH.exists() else SAMPLE_CSV_PATH
-fetched_at = (
-    datetime.fromtimestamp(source_path.stat().st_mtime, tz=UTC)
-    .astimezone()
-    .strftime("%Y-%m-%d")
-)
-st.caption(f"データ取得日: {fetched_at}")
-with st.expander("※ データについての注記"):
-    st.markdown(
-        "- 実際の世界遺産登録数と完全には一致しない場合があります"
-        "（データ取得元の制約により一部の遺産が含まれていません）\n"
-        "- 複数国にまたがる遺産（越境遺産）は代表1か国のみで集計しています\n"
-        "- 分類（文化遺産/自然遺産/複合遺産）はWikidataの情報を基に算出しており、"
-        "UNESCO公式データと差異がある場合があります"
-    )
+st.caption(f"データ取得日: {data_fetched_date()}")
+render_data_notes(_DATA_NOTES)
 
 if summary.empty:
     st.info("表示できるデータがありません。")

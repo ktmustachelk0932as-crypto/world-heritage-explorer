@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pandas as pd
 
 # 分類の内部キー（元データの category 値）と、集計結果での列名。
@@ -42,24 +44,11 @@ def summarize_by_country(df: pd.DataFrame) -> pd.DataFrame:
         入力が空の場合は列だけ揃えた空の DataFrame を返す。
     """
     if df.empty:
-        return pd.DataFrame(
-            {
-                "country": pd.Series(dtype="object"),
-                "iso_code": pd.Series(dtype="object"),
-                "total": pd.Series(dtype="int64"),
-                "cultural": pd.Series(dtype="int64"),
-                "natural": pd.Series(dtype="int64"),
-                "mixed": pd.Series(dtype="int64"),
-            }
+        return _empty_frame(
+            COUNTRY_SUMMARY_COLUMNS, object_columns=("country", "iso_code")
         )
 
-    counts = (
-        df.groupby(["country", "iso_code", "category"]).size().unstack(fill_value=0)
-    )
-    for key in CATEGORY_KEYS:
-        if key not in counts.columns:
-            counts[key] = 0
-    counts = counts[list(CATEGORY_KEYS)].rename(columns=CATEGORY_COLUMNS)
+    counts = _category_pivot(df, ["country", "iso_code"])
     counts["total"] = counts.sum(axis=1)
 
     result = counts.reset_index()
@@ -103,28 +92,36 @@ def yearly_counts(
     if country is not None:
         df = df[df["country"] == country]
     if df.empty:
-        return pd.DataFrame(
-            {
-                "year": pd.Series(dtype="int64"),
-                "cultural": pd.Series(dtype="int64"),
-                "natural": pd.Series(dtype="int64"),
-                "mixed": pd.Series(dtype="int64"),
-                "total": pd.Series(dtype="int64"),
-            }
-        )
+        return _empty_frame(YEARLY_COUNTS_COLUMNS)
 
-    counts = df.groupby(["date_inscribed", "category"]).size().unstack(fill_value=0)
-    for key in CATEGORY_KEYS:
-        if key not in counts.columns:
-            counts[key] = 0
-    counts = counts[list(CATEGORY_KEYS)].rename(columns=CATEGORY_COLUMNS)
+    counts = _category_pivot(df, ["date_inscribed"])
 
     full_years = range(int(counts.index.min()), int(counts.index.max()) + 1)
     counts = counts.reindex(full_years, fill_value=0)
     counts.index.name = "year"
-    counts["total"] = counts[list(CATEGORY_COLUMNS.values())].sum(axis=1)
+    counts["total"] = counts.sum(axis=1)
 
     if cumulative:
         counts = counts.cumsum()
 
     return counts.reset_index()[list(YEARLY_COUNTS_COLUMNS)]
+
+
+def _category_pivot(df: pd.DataFrame, by: list[str]) -> pd.DataFrame:
+    """``by`` × 分類で件数を集計し、分類 3 列（``CATEGORY_COLUMNS`` の値）を必ず持つ表にする。"""
+    counts = df.groupby([*by, "category"]).size().unstack(fill_value=0)
+    return counts.reindex(columns=list(CATEGORY_KEYS), fill_value=0).rename(
+        columns=CATEGORY_COLUMNS
+    )
+
+
+def _empty_frame(
+    columns: Sequence[str], *, object_columns: Sequence[str] = ()
+) -> pd.DataFrame:
+    """列だけ揃えた空の DataFrame（``object_columns`` 以外は int64）。"""
+    return pd.DataFrame(
+        {
+            col: pd.Series(dtype="object" if col in object_columns else "int64")
+            for col in columns
+        }
+    )

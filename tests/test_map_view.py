@@ -65,11 +65,6 @@ def test_map_uses_openstreetmap_without_wrapping() -> None:
     assert "worldCopyJump" not in html
 
 
-def test_build_map_focus_centres_on_point() -> None:
-    html = build_map(_SAMPLE, focus=(34.8394, 134.6939)).get_root().render()
-    assert "134.6939" in html
-
-
 def test_find_site_by_coordinates_exact_match() -> None:
     site = find_site_by_coordinates(_SAMPLE, 34.8394, 134.6939)
     assert site is not None

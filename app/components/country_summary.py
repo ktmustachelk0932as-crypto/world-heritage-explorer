@@ -6,18 +6,12 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from app.components.map_view import CATEGORY_HEX_COLORS, CATEGORY_LABELS_JA
-from core.aggregations import CATEGORY_COLUMNS
-
-# 集計列（cultural/natural/mixed）→ 日本語ラベル。地図の凡例と表記を合わせる。
-_COLUMN_LABELS_JA: dict[str, str] = {
-    CATEGORY_COLUMNS[key]: label for key, label in CATEGORY_LABELS_JA.items()
-}
-
-# 分類ごとの色（日本語ラベル→hex）。地図マーカーの色に対応させる。
-_CATEGORY_COLORS_JA: dict[str, str] = {
-    CATEGORY_LABELS_JA[key]: color for key, color in CATEGORY_HEX_COLORS.items()
-}
+from app.components.map_view import (
+    CATEGORY_COLORS_BY_LABEL_JA,
+    CATEGORY_COLUMN_LABELS_JA,
+    CATEGORY_LABELS_JA,
+)
+from core.aggregations import CATEGORY_COLUMNS, CATEGORY_KEYS
 
 
 def render_country_bar_chart(summary: pd.DataFrame, *, top_n: int = 20) -> None:
@@ -39,7 +33,7 @@ def render_country_bar_chart(summary: pd.DataFrame, *, top_n: int = 20) -> None:
         var_name="category",
         value_name="count",
     )
-    long_df["category"] = long_df["category"].map(_COLUMN_LABELS_JA)
+    long_df["category"] = long_df["category"].map(CATEGORY_COLUMN_LABELS_JA)
 
     fig = px.bar(
         long_df,
@@ -47,12 +41,12 @@ def render_country_bar_chart(summary: pd.DataFrame, *, top_n: int = 20) -> None:
         y="country",
         color="category",
         orientation="h",
-        color_discrete_map=_CATEGORY_COLORS_JA,
+        color_discrete_map=CATEGORY_COLORS_BY_LABEL_JA,
         category_orders={
             # px.bar(orientation="h") はこのリストを y 軸で反転させるため、
             # 登録件数の降順（＝summary の並び）をそのまま渡すと最多件数国が最上段になる。
             "country": top["country"].tolist(),
-            "category": list(_CATEGORY_COLORS_JA),
+            "category": list(CATEGORY_COLORS_BY_LABEL_JA),
         },
         labels={"count": "登録件数", "country": "国 / 地域", "category": "分類"},
     )
@@ -85,22 +79,13 @@ def render_country_detail(
 
     cols = st.columns(4)
     cols[0].metric("登録件数", int(row["total"]))
-    cols[1].metric(CATEGORY_LABELS_JA["Cultural"], int(row["cultural"]))
-    cols[2].metric(CATEGORY_LABELS_JA["Natural"], int(row["natural"]))
-    cols[3].metric(CATEGORY_LABELS_JA["Mixed"], int(row["mixed"]))
+    for col, key in zip(cols[1:], CATEGORY_KEYS, strict=True):
+        col.metric(CATEGORY_LABELS_JA[key], int(row[CATEGORY_COLUMNS[key]]))
 
     breakdown = pd.DataFrame(
         {
-            "category": [
-                CATEGORY_LABELS_JA["Cultural"],
-                CATEGORY_LABELS_JA["Natural"],
-                CATEGORY_LABELS_JA["Mixed"],
-            ],
-            "count": [
-                int(row["cultural"]),
-                int(row["natural"]),
-                int(row["mixed"]),
-            ],
+            "category": [CATEGORY_LABELS_JA[key] for key in CATEGORY_KEYS],
+            "count": [int(row[CATEGORY_COLUMNS[key]]) for key in CATEGORY_KEYS],
         }
     )
     breakdown = breakdown[breakdown["count"] > 0]
@@ -110,7 +95,7 @@ def render_country_detail(
             names="category",
             values="count",
             color="category",
-            color_discrete_map=_CATEGORY_COLORS_JA,
+            color_discrete_map=CATEGORY_COLORS_BY_LABEL_JA,
         )
         fig.update_layout(
             height=280,
