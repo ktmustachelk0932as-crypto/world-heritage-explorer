@@ -7,6 +7,7 @@ import pandas as pd
 
 from app.components.map_view import (
     CATEGORY_MARKER_COLORS,
+    CLUSTER_DISABLE_ZOOM,
     build_map,
     find_site_by_coordinates,
 )
@@ -62,6 +63,11 @@ def test_map_uses_openstreetmap_without_wrapping() -> None:
     assert "cartodb" not in html.lower()
     assert '"noWrap": true' in html
     assert '"minZoom": 2' in html
+
+
+def test_map_disables_clustering_at_focus_zoom() -> None:
+    html = build_map(_SAMPLE).get_root().render()
+    assert f'"disableClusteringAtZoom": {CLUSTER_DISABLE_ZOOM}' in html
     assert "worldCopyJump" not in html
 
 

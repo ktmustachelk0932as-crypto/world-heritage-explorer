@@ -13,6 +13,7 @@ from app.components.detail_panel import render_detail_panel
 from app.components.map_view import (
     CATEGORY_LABELS_JA,
     CATEGORY_MARKER_COLORS,
+    CLUSTER_DISABLE_ZOOM,
     build_map,
     find_site_by_coordinates,
 )
@@ -27,8 +28,10 @@ _LAST_SEARCH_KEY = "map_last_handled_search"
 _SEARCH_WIDGET_KEY = "map_site_search"
 _CLEAR_FLAG_KEY = "map_clear_search"
 _FOCUS_KEY = "map_focus_center"
+_FOCUS_SEQ_KEY = "map_focus_seq"
 _MAP_WIDGET_KEY = "heritage_map"
-_FOCUS_ZOOM = 6
+# 検索で寄せるときのズーム。クラスタ解除倍率以上にして選択マーカーを単独表示する。
+_FOCUS_ZOOM = CLUSTER_DISABLE_ZOOM
 
 _DATA_NOTES = (
     (
@@ -64,8 +67,11 @@ def _load_images() -> pd.DataFrame:
 # 地図は st_folium に渡すたびに内部で ``render()`` され _id 等が書き換わるため、
 # @st.cache_resource で使い回すと 2 回目以降クリックイベントが取れなくなる。毎回
 # build_map で作り直す（重いデータ読込は load_sites_cached 側でキャッシュ済み）。
-# 固定 key を付けているので、地図の pan/zoom や last_object_clicked は再実行を
-# またいで保持される。検索での再センタリングは st_folium の center/zoom で行う。
+# key は「検索の回数」を含めており、新しい検索のときだけ変わる。key が同じ間は
+# 地図の pan/zoom や last_object_clicked が再実行をまたいで保持される。
+# st_folium のフロントエンドは center/zoom が「前回渡した値」と異なるときしか
+# setView しないため、毎回同じズーム値を渡しても 2 回目以降は効かない。検索の
+# たびに key を変えてコンポーネントを作り直し、center/zoom を確実に適用する。
 
 
 @st.cache_data(ttl=timedelta(days=7), show_spinner=False)
@@ -141,9 +147,17 @@ with map_col:
             float(row["latitude"]),
             float(row["longitude"]),
         ]
+        # key を変えて地図を作り直す。前の key の値は不要なので捨てる。作り直した
+        # 地図はクリック座標も None から始まるため、処理済みクリックも忘れてよい
+        # （忘れないと、検索前に押したマーカーを検索後にもう一度押しても無視される）。
+        prev_seq = st.session_state.get(_FOCUS_SEQ_KEY, 0)
+        st.session_state.pop(f"{_MAP_WIDGET_KEY}_{prev_seq}", None)
+        st.session_state.pop(_LAST_CLICK_KEY, None)
+        st.session_state[_FOCUS_SEQ_KEY] = prev_seq + 1
 
     focus_center = st.session_state.get(_FOCUS_KEY)
     focus_zoom = _FOCUS_ZOOM if focus_center is not None else None
+    map_key = f"{_MAP_WIDGET_KEY}_{st.session_state.get(_FOCUS_SEQ_KEY, 0)}"
 
     map_state = st_folium(
         build_map(sites),
@@ -152,7 +166,7 @@ with map_col:
         center=focus_center,
         zoom=focus_zoom,
         returned_objects=["last_object_clicked"],
-        key=_MAP_WIDGET_KEY,
+        key=map_key,
     )
 
 # マーカークリックの反映。st_folium は再実行後も同じ座標を返し続けるため、

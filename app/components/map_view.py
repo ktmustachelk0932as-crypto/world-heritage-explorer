@@ -44,6 +44,10 @@ _DEFAULT_CENTER: tuple[float, float] = (20.0, 0.0)
 _DEFAULT_ZOOM: int = 2
 # これ以上引くと世界地図が複数枚並ぶ（タイルの水平リピート）ため下限を設ける。
 _MIN_ZOOM: int = 2
+# このズーム以上ではクラスタリングを止めて全マーカーを個別表示する。検索で寄せた
+# 直後に選択した遺産がクラスタに埋もれないよう、地図ページのフォーカス倍率
+# （app/views/map.py の _FOCUS_ZOOM）はこの値以上にすること。
+CLUSTER_DISABLE_ZOOM: int = 10
 
 # クリック座標とマーカー座標を突き合わせる際の許容誤差（度）。
 _COORD_TOLERANCE: float = 1e-6
@@ -72,7 +76,10 @@ def build_map(df: pd.DataFrame) -> folium.Map:
     folium.TileLayer(
         "OpenStreetMap", no_wrap=True, min_zoom=_MIN_ZOOM, control=False
     ).add_to(fmap)
-    cluster = MarkerCluster(name="世界遺産").add_to(fmap)
+    cluster = MarkerCluster(
+        name="世界遺産",
+        options={"disableClusteringAtZoom": CLUSTER_DISABLE_ZOOM},
+    ).add_to(fmap)
 
     for row in df.itertuples(index=False):
         color = CATEGORY_MARKER_COLORS.get(row.category, UNKNOWN_MARKER_COLOR)
