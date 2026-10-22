@@ -1,0 +1,26 @@
+version: 2
+
+updates:
+  # uv.lock の依存パッケージ
+  - package-ecosystem: "uv"
+    directory: "/"
+    # 開発は dev ブランチで行うため、更新 PR も dev 向けに作る
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    # パッチ・マイナー更新は1つの PR にまとめる
+    groups:
+      python-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # ci.yml の Actions（SHA 固定のまま更新される）
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
